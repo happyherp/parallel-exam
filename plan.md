@@ -88,24 +88,35 @@ This worked example should be the v0 acceptance test: upload `derivadas2.docx`, 
 
 ## Current state
 
-### Files in repo (already created)
+### Files in repo
 
+- `.gitignore`
+- `.github/workflows/test.yml` — CI: installs pandoc + uv, runs `pytest tests/ -v` on every push/PR
 - `Dockerfile` — Python 3.12-slim base, installs `pandoc` via apt, uses `uv` for dep install
 - `fly.toml` — region `mad` (Madrid), scale-to-zero, 1GB memory, port 8080
 - `pyproject.toml` — deps pinned: fastapi, uvicorn, jinja2, anthropic, sympy, pypandoc, python-docx, pydantic
+- `README.md` — architecture overview, pipeline diagram, phase status, quick start
+- `app/__init__.py` (empty)
 - `app/main.py` — FastAPI app with 4 routes: `/`, `/upload`, `/generate/{job_id}/{problem_idx}`, `/download/{job_id}`. Three of four routes are `NotImplementedError` stubs.
 - `app/models.py` — pydantic models: `Problem`, `ParameterConstraint`, `Invariant`, `Template`, `Variant`. **These shapes are the contract between pipeline stages.**
+- `app/pipeline/__init__.py` (empty)
+- `app/pipeline/extract.py` — `docx_to_latex(path) -> str` via pypandoc
+- `app/pipeline/parse.py` — `latex_to_problems(latex) -> list[Problem]`; handles pandoc's multi-block enumerate structure and free-text sub-parts
+- `app/pipeline/generate.py` — `sample_parameters(template, max_attempts) -> Variant`; per-template sampler registry
+- `app/pipeline/verify.py` — `verify(template, params) -> Variant`; SymPy gate, evaluates all invariants
+- `app/pipeline/templates_library/__init__.py` (empty)
+- `app/pipeline/templates_library/rational_business_profit.py` — hand-written `Template` for the rational-business-profit problem type
+- `tests/__init__.py` (empty)
+- `tests/test_phase1.py` — 13 acceptance tests covering all Phase 1 stages (all passing)
+- `tests/fixtures/` — `.docx` exam files from the teacher
 
 ### Files NOT yet created
 
-- `app/__init__.py` (empty)
 - `app/config.py` — pydantic-settings for `ANTHROPIC_API_KEY` etc.
 - `app/llm.py` — Anthropic client wrapper
-- `app/pipeline/` — entire module
 - `app/templates/` — Jinja2 HTML templates
 - `app/static/` — CSS, optionally KaTeX bundle
-- `tests/` — pytest, including fixture `.docx` files
-- `.env.example`, `README.md`
+- `.env.example`
 
 ### Test fixtures (the user has these locally; copy into `tests/fixtures/`)
 
@@ -118,7 +129,7 @@ This worked example should be the v0 acceptance test: upload `derivadas2.docx`, 
 
 Front-loaded with deterministic, testable pieces. LLM-dependent stages come last because they're the hardest to debug.
 
-### Phase 1 — Deterministic foundation (no LLM)
+### Phase 1 — Deterministic foundation (no LLM) ✅ COMPLETE
 
 **1.1 `app/pipeline/extract.py`**
 - Function: `docx_to_latex(path: Path) -> str`
@@ -154,7 +165,7 @@ Front-loaded with deterministic, testable pieces. LLM-dependent stages come last
 - For future templates: each template will need a domain-specific search strategy. Consider whether a generic constraint-solver wrapper (z3? brute force?) is worth it later. For v1, per-template sampling is fine.
 - Acceptance: returns a different verified variant each call with different (k, m, n)
 
-**End of Phase 1**: full pipeline minus LLM works on derivadas2 problem 1. Test in isolation, no UI yet.
+**End of Phase 1** ✅: full pipeline minus LLM works on derivadas2 problem 1. 13 tests passing. No UI yet.
 
 ### Phase 2 — UI shell
 
