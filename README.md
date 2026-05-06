@@ -34,14 +34,20 @@ Verification is the gate — no variant reaches the teacher unless `Variant.veri
 ## Quick start
 
 ```bash
-# Requires Python 3.12+ and pandoc
-pip install -e .
+# Install pandoc (required system dependency)
+# Ubuntu/Debian:
+sudo apt install pandoc
+# macOS:
+brew install pandoc
+
+# Install Python dependencies (requires Python 3.12+ and uv)
+uv sync --group dev
 
 # Run the test suite
-pytest tests/ -v
+uv run pytest tests/ -v
 
 # Start the dev server
-uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload
 ```
 
 The app will be available at `http://localhost:8000`.
