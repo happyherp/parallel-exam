@@ -116,13 +116,14 @@ This worked example should be the v0 acceptance test: upload `derivadas2.docx`, 
 - `tests/__init__.py` (empty)
 - `tests/test_phase1.py` — 13 acceptance tests covering all Phase 1 stages (all passing)
 - `tests/test_phase2.py` — 18 acceptance tests covering UI routes and prose rendering
+- `app/pipeline/render.py` — `variants_to_docx()` builds a LaTeX document and calls pandoc to produce a `.docx`
 - `tests/test_phase3.py` — tests for reword pipeline (mocked LLM)
+- `tests/test_phase4.py` — tests for render pipeline and `/download` route
 - `tests/fixtures/` — `.docx` exam files from the teacher
 - `.env.example` — documents required environment variables
 
 ### Files NOT yet created
 
-- `app/pipeline/render.py` — `variants_to_docx()` for Phase 4 output
 - `app/pipeline/template.py` — `extract_template()` LLM-based template extraction for Phase 5
 
 ### Test fixtures (the user has these locally; copy into `tests/fixtures/`)
@@ -198,15 +199,19 @@ Front-loaded with deterministic, testable pieces. LLM-dependent stages come last
 - Falls back to mechanical prose silently on any error (missing key, network, rate limit) so the pipeline is never blocked.
 - Integrated automatically into `/upload` and `/generate` routes — the variant card always shows reworded prose when the API key is set.
 
-### Phase 4 — Output
+### Phase 4 — Output ✅ COMPLETE
 
 **4.1 `app/pipeline/render.py`**
-- Function: `variants_to_docx(variants: list[Variant], output_path: Path)`
-- Use python-docx; for math, use Word's OMML XML directly (python-docx doesn't have a high-level math API)
-- Approach: build minimal OMML fragments from LaTeX expressions. There's a library `latex2mathml` and from there to OMML via XSLT, OR use pandoc reverse direction (pandoc can write docx from latex). Try pandoc-reverse first; it's the path of least resistance and we already depend on pandoc.
-- Acceptance: download .docx renders correctly when opened in Word/LibreOffice
+- Function: `variants_to_docx(problems, templates, variants, output_path)`
+- Pandoc-reverse approach: construct a UTF-8 LaTeX document from the variant prose (which already has `\(...\)` inline math), write it to a temp `.tex` file, then call `pandoc --from=latex --to=docx`. Pandoc generates OMML equations in the docx automatically — no XSLT or `latex2mathml` needed.
+- For problems with verified variants: renders the reworded prose + student tasks from the template.
+- For problems without variants: passes the original `Problem.prose_latex` and sub-parts through unchanged.
+- Acceptance: output file has valid zip/docx magic bytes; renders cleanly in LibreOffice and Word.
 
-**4.2 Implement `/download` route**
+**4.2 `/download/{job_id}` route**
+- Generates the docx on-demand, streams it as a `FileResponse`, deletes the temp file in a `BackgroundTask` after the response is sent.
+- Response includes a human-readable filename (`{original_stem}_variante.docx`) in `Content-Disposition`.
+- Download button added to the review page header.
 
 ### Phase 5 — LLM template extraction (hardest, last)
 

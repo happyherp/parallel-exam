@@ -10,6 +10,7 @@
 <div class="review-header">
   <h2>Problemas extraídos</h2>
   <span class="meta">{{ job.problems | length }} problema{{ 's' if job.problems | length != 1 else '' }}</span>
+  <a href="/download/{{ job.job_id }}" class="btn btn-primary btn-sm">⬇ Descargar variante (.docx)</a>
   <a href="/" class="btn btn-secondary btn-sm">← Subir otro</a>
 </div>
 
