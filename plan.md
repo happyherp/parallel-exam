@@ -97,26 +97,34 @@ This worked example should be the v0 acceptance test: upload `derivadas2.docx`, 
 - `pyproject.toml` — deps pinned: fastapi, uvicorn, jinja2, anthropic, sympy, pypandoc, python-docx, pydantic
 - `README.md` — architecture overview, pipeline diagram, phase status, quick start
 - `app/__init__.py` (empty)
-- `app/main.py` — FastAPI app with 4 routes: `/`, `/upload`, `/generate/{job_id}/{problem_idx}`, `/download/{job_id}`. Three of four routes are `NotImplementedError` stubs.
+- `app/config.py` — pydantic-settings: `ANTHROPIC_API_KEY`, `REWORD_MODEL`
+- `app/llm.py` — lazy singleton Anthropic client
+- `app/main.py` — FastAPI app with 4 routes: `/`, `/upload`, `/generate/{job_id}/{problem_idx}` (all implemented), `/download/{job_id}` (Phase 4 stub)
 - `app/models.py` — pydantic models: `Problem`, `ParameterConstraint`, `Invariant`, `Template`, `Variant`. **These shapes are the contract between pipeline stages.**
+- `app/jobs.py` — in-memory job store keyed by UUID
 - `app/pipeline/__init__.py` (empty)
 - `app/pipeline/extract.py` — `docx_to_latex(path) -> str` via pypandoc
 - `app/pipeline/parse.py` — `latex_to_problems(latex) -> list[Problem]`; handles pandoc's multi-block enumerate structure and free-text sub-parts
 - `app/pipeline/generate.py` — `sample_parameters(template, max_attempts) -> Variant`; per-template sampler registry
 - `app/pipeline/verify.py` — `verify(template, params) -> Variant`; SymPy gate, evaluates all invariants
+- `app/pipeline/prose.py` — `render_prose(variant, template) -> Variant`; substitutes parameters into `prose_template`
+- `app/pipeline/reword.py` — `reword_surface(variant, template) -> Variant`; LLM rewording with math preservation check and graceful fallback
 - `app/pipeline/templates_library/__init__.py` (empty)
 - `app/pipeline/templates_library/rational_business_profit.py` — hand-written `Template` for the rational-business-profit problem type
+- `app/templates/` — Jinja2 HTML templates: `base.html`, `upload.html`, `review.html`, `partials/variant_card.html`
+- `app/static/style.css`
 - `tests/__init__.py` (empty)
 - `tests/test_phase1.py` — 13 acceptance tests covering all Phase 1 stages (all passing)
+- `tests/test_phase2.py` — 18 acceptance tests covering UI routes and prose rendering
+- `app/pipeline/render.py` — `variants_to_docx()` builds a LaTeX document and calls pandoc to produce a `.docx`
+- `app/pipeline/template.py` — `extract_template()` LLM-based template extraction with SymPy sanity check and parameter bound inference
+- `tests/test_phase3.py` — tests for reword pipeline (mocked LLM)
+- `tests/test_phase4.py` — tests for render pipeline and `/download` route
+- `tests/test_phase5.py` — tests for template extraction and generic sampler (mocked LLM)
 - `tests/fixtures/` — `.docx` exam files from the teacher
+- `.env.example` — documents required environment variables
 
-### Files NOT yet created
-
-- `app/config.py` — pydantic-settings for `ANTHROPIC_API_KEY` etc.
-- `app/llm.py` — Anthropic client wrapper
-- `app/templates/` — Jinja2 HTML templates
-- `app/static/` — CSS, optionally KaTeX bundle
-- `.env.example`
+### All planned files created ✅
 
 ### Test fixtures (the user has these locally; copy into `tests/fixtures/`)
 
@@ -167,7 +175,7 @@ Front-loaded with deterministic, testable pieces. LLM-dependent stages come last
 
 **End of Phase 1** ✅: full pipeline minus LLM works on derivadas2 problem 1. 13 tests passing. No UI yet.
 
-### Phase 2 — UI shell
+### Phase 2 — UI shell ✅ COMPLETE
 
 **2.1 `app/templates/base.html`, `upload.html`, `review.html`** — Jinja2, HTMX-driven. KaTeX (CDN, `https://cdn.jsdelivr.net/npm/katex@0.16.x/dist/`) for math rendering on the page.
 
@@ -175,36 +183,56 @@ Front-loaded with deterministic, testable pieces. LLM-dependent stages come last
 
 **2.3 In-memory job store keyed by UUID** — no database needed for v1. Jobs expire after 1 hour. Document the decision; persistence can come later.
 
-**End of Phase 2**: teacher can upload derivadas2.docx, see problem 1 with a generated variant, click regenerate to get a different variant.
+**End of Phase 2** ✅: teacher can upload derivadas2.docx, see problem 1 with a generated variant, click regenerate to get a different variant.
 
-### Phase 3 — Surface text rewording
+### Phase 3 — Surface text rewording ✅ COMPLETE
 
-**3.1 `app/llm.py`** — minimal Anthropic client wrapper, `claude-opus-4-7` model (or sonnet for cost — sonnet is fine for rewording). Use `ANTHROPIC_API_KEY` from env.
+**3.1 `app/config.py`** — pydantic-settings for `ANTHROPIC_API_KEY` and `REWORD_MODEL`. `.env.example` documents required vars.
 
-**3.2 `app/pipeline/reword.py`**
+**3.2 `app/llm.py`** — lazy singleton Anthropic client; raises `RuntimeError` with a helpful message if the API key is not configured.
+
+**3.3 `app/pipeline/reword.py`**
 - Function: `reword_surface(variant: Variant, template: Template, language: str = "es") -> Variant`
-- LLM call. Prompt: "Here is the original prose template and the new parameter values. Vary only the surface text — variable names, applied context (e.g., 'company' → 'factory'), units. Do NOT change any mathematical expressions or numbers. Return the rewritten prose."
-- Pass `template.prose_template` and `variant.parameters` as context
-- Result goes into `variant.rendered_prose_latex`
-- Verify post-condition: the LaTeX equations in the output match those produced by parameter substitution. If LLM modified the math, reject.
+- LLM call using `claude-haiku-4-5` (cheapest model; accurate enough for surface rewording). System prompt is prompt-cached to reduce token costs on repeated calls.
+- Prompt instructs the model to keep all `\(...\)` LaTeX blocks verbatim while varying the applied context (e.g., "empresa" → "fábrica", "beneficios" → "producción").
+- Post-condition: `_math_preserved()` extracts all math blocks from mechanical prose and LLM output and asserts they are identical. If the LLM altered any math, the output is rejected and mechanical prose is used.
+- Falls back to mechanical prose silently on any error (missing key, network, rate limit) so the pipeline is never blocked.
+- Integrated automatically into `/upload` and `/generate` routes — the variant card always shows reworded prose when the API key is set.
 
-### Phase 4 — Output
+### Phase 4 — Output ✅ COMPLETE
 
 **4.1 `app/pipeline/render.py`**
-- Function: `variants_to_docx(variants: list[Variant], output_path: Path)`
-- Use python-docx; for math, use Word's OMML XML directly (python-docx doesn't have a high-level math API)
-- Approach: build minimal OMML fragments from LaTeX expressions. There's a library `latex2mathml` and from there to OMML via XSLT, OR use pandoc reverse direction (pandoc can write docx from latex). Try pandoc-reverse first; it's the path of least resistance and we already depend on pandoc.
-- Acceptance: download .docx renders correctly when opened in Word/LibreOffice
+- Function: `variants_to_docx(problems, templates, variants, output_path)`
+- Pandoc-reverse approach: construct a UTF-8 LaTeX document from the variant prose (which already has `\(...\)` inline math), write it to a temp `.tex` file, then call `pandoc --from=latex --to=docx`. Pandoc generates OMML equations in the docx automatically — no XSLT or `latex2mathml` needed.
+- For problems with verified variants: renders the reworded prose + student tasks from the template.
+- For problems without variants: passes the original `Problem.prose_latex` and sub-parts through unchanged.
+- Acceptance: output file has valid zip/docx magic bytes; renders cleanly in LibreOffice and Word.
 
-**4.2 Implement `/download` route**
+**4.2 `/download/{job_id}` route**
+- Generates the docx on-demand, streams it as a `FileResponse`, deletes the temp file in a `BackgroundTask` after the response is sent.
+- Response includes a human-readable filename (`{original_stem}_variante.docx`) in `Content-Disposition`.
+- Download button added to the review page header.
 
-### Phase 5 — LLM template extraction (hardest, last)
+### Phase 5 — LLM template extraction ✅ COMPLETE
 
 **5.1 `app/pipeline/template.py`**
-- Function: `extract_template(problem: Problem) -> Template`
-- LLM call. The system prompt describes what a Template is, includes 1-2 hand-written examples (few-shot), and asks for structured output (use Anthropic's tool-use feature for guaranteed schema-conformant JSON, or pydantic + repair).
-- The output Template is then run through `verify` against the *original* parameters as a sanity check — if the LLM's extracted template doesn't even validate the original, reject the template.
-- This is the messy part. Real exams have problem types we won't have templates for; the LLM has to infer the structure. Expect this to require iteration.
+- Function: `extract_template(problem: Problem) -> Template | None`
+- Calls `claude-sonnet-4-6` with Anthropic's tool-use feature so the response is guaranteed to match our pydantic schema (no JSON parsing / repair needed).
+- System prompt (~2.5 KB) explains the Template structure with the rational-business-profit problem as a worked example. The prompt is prompt-cached so repeated calls in a session amortise the cost.
+- After the LLM returns, the extracted template is run through `verify()` against the original numerical parameters provided by the model. If a single invariant fails on the source values, the LLM made a structural mistake and the template is rejected.
+- Bound inference: after passing the sanity check, parameter constraints are post-processed so each parameter's `min`/`max` brackets the original value (default ±4×|original|, with a floor of ±30). This lets the generic brute-force sampler search a productive region of parameter space rather than the default `[-30, 30]` cube.
+- Falls back to None on any failure (missing API key, network, schema mismatch, verification rejection) so the pipeline degrades gracefully.
+
+**5.2 Generic brute-force sampler**
+- `app/pipeline/generate.py::_generic_sampler()` is the fallback when no per-template sampler is registered. Uses random integer search over the parameter constraints (sign + min/max).
+- Default budget is 50× the per-template budget (≥ 2500 attempts) because LLM-extracted templates often have restrictive invariants like "f' has integer critical point" that need many tries.
+- Known limitation: very tightly constrained templates (e.g. 6+ invariants involving solve(diff(...))) may exhaust the budget on subsequent regenerations. v1 accepts this — the teacher edits manually when no variant can be generated. A smarter solver (z3, smt) is post-v1 work.
+
+**5.3 Integration with `/upload`**
+- `_find_template()` (library heuristic) is tried first — fastest, highest quality, hand-tuned per template.
+- If no library template matches, `extract_template()` is the fallback. Each LLM call adds ~3-10 seconds to upload time; the cost is acceptable for v1.
+
+**End of Phase 5** ✅: every problem in an uploaded exam attempts to get a verified variant. Variants either come from a library template (best path), an LLM-extracted template that passes verification (good path), or fall through to "edit manually" (graceful degradation).
 
 ## Stack & deployment
 

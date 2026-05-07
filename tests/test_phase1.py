@@ -6,6 +6,7 @@ import pytest
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DERIVADAS2 = FIXTURES / "derivadas2.doc.docx"
+ANALISIS1 = FIXTURES / "Ex Analisis 1º Bach .docx"
 
 
 # ── 1.1 extract ───────────────────────────────────────────────────────────────
@@ -155,3 +156,96 @@ def test_generate_produces_variety(rbp_template):
     param_sets = [tuple(sorted(v.parameters.items())) for v in variants]
     # At least 2 distinct parameter sets among 5 samples.
     assert len(set(param_sets)) >= 2
+
+
+# ── Ex Analisis 1º Bach — extract ────────────────────────────────────────────
+
+def test_extract_analisis1_returns_latex():
+    from app.pipeline.extract import docx_to_latex
+
+    latex = docx_to_latex(ANALISIS1)
+    assert isinstance(latex, str)
+    assert len(latex) > 100
+
+
+def test_extract_analisis1_contains_problem1_formula():
+    from app.pipeline.extract import docx_to_latex
+
+    latex = docx_to_latex(ANALISIS1)
+    # Cubic polynomial from Problema 1.
+    assert r"x^{3} + 4x^{2} + x - 6" in latex
+
+
+def test_extract_analisis1_contains_problem2_fraction():
+    from app.pipeline.extract import docx_to_latex
+
+    latex = docx_to_latex(ANALISIS1)
+    # Rational function from Problema 2.
+    assert r"\frac{2x^{2} + 1}{x^{2} + 2x - 3}" in latex
+
+
+# ── Ex Analisis 1º Bach — parse ───────────────────────────────────────────────
+
+def test_parse_analisis1_yields_three_problems():
+    from app.pipeline.extract import docx_to_latex
+    from app.pipeline.parse import latex_to_problems
+
+    latex = docx_to_latex(ANALISIS1)
+    problems = latex_to_problems(latex)
+    assert len(problems) == 3
+
+
+def test_parse_analisis1_problem_numbers():
+    from app.pipeline.extract import docx_to_latex
+    from app.pipeline.parse import latex_to_problems
+
+    latex = docx_to_latex(ANALISIS1)
+    problems = latex_to_problems(latex)
+    assert [p.number for p in problems] == [1, 2, 3]
+
+
+def test_parse_analisis1_problem_points():
+    from app.pipeline.extract import docx_to_latex
+    from app.pipeline.parse import latex_to_problems
+
+    latex = docx_to_latex(ANALISIS1)
+    problems = latex_to_problems(latex)
+    assert problems[0].points == 4.0
+    assert problems[1].points == 4.0
+    assert problems[2].points == 2.0
+
+
+def test_parse_analisis1_problem1_prose_contains_formula():
+    from app.pipeline.extract import docx_to_latex
+    from app.pipeline.parse import latex_to_problems
+
+    latex = docx_to_latex(ANALISIS1)
+    problems = latex_to_problems(latex)
+    assert r"x^{3} + 4x^{2} + x - 6" in problems[0].prose_latex
+
+
+def test_parse_analisis1_problem1_has_subparts():
+    from app.pipeline.extract import docx_to_latex
+    from app.pipeline.parse import latex_to_problems
+
+    latex = docx_to_latex(ANALISIS1)
+    problems = latex_to_problems(latex)
+    assert len(problems[0].sub_parts) == 3
+
+
+def test_parse_analisis1_problem2_has_subparts():
+    from app.pipeline.extract import docx_to_latex
+    from app.pipeline.parse import latex_to_problems
+
+    latex = docx_to_latex(ANALISIS1)
+    problems = latex_to_problems(latex)
+    assert len(problems[1].sub_parts) == 2
+
+
+def test_parse_analisis1_problem3_no_subparts():
+    from app.pipeline.extract import docx_to_latex
+    from app.pipeline.parse import latex_to_problems
+
+    latex = docx_to_latex(ANALISIS1)
+    problems = latex_to_problems(latex)
+    assert len(problems[2].sub_parts) == 0
