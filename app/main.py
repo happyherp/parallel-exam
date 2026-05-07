@@ -17,6 +17,7 @@ from app.pipeline.extract import docx_to_latex
 from app.pipeline.generate import sample_parameters
 from app.pipeline.parse import latex_to_problems
 from app.pipeline.prose import render_prose
+from app.pipeline.reword import reword_surface
 from app.pipeline.templates_library.rational_business_profit import (
     RATIONAL_BUSINESS_PROFIT,
 )
@@ -101,6 +102,7 @@ async def upload(request: Request, file: UploadFile = File(...)):
             try:
                 variant = sample_parameters(tmpl)
                 variant = render_prose(variant, tmpl)
+                variant = reword_surface(variant, tmpl)
                 variants[i] = variant
             except Exception:
                 variants[i] = None
@@ -131,6 +133,7 @@ async def generate_variant(request: Request, job_id: str, problem_idx: int):
     try:
         variant = sample_parameters(tmpl)
         variant = render_prose(variant, tmpl)
+        variant = reword_surface(variant, tmpl)
         job.variants[problem_idx] = variant
     except Exception as exc:
         return HTMLResponse(f"<p>Error al generar la variante: {exc}</p>", status_code=500)

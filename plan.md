@@ -97,26 +97,33 @@ This worked example should be the v0 acceptance test: upload `derivadas2.docx`, 
 - `pyproject.toml` — deps pinned: fastapi, uvicorn, jinja2, anthropic, sympy, pypandoc, python-docx, pydantic
 - `README.md` — architecture overview, pipeline diagram, phase status, quick start
 - `app/__init__.py` (empty)
-- `app/main.py` — FastAPI app with 4 routes: `/`, `/upload`, `/generate/{job_id}/{problem_idx}`, `/download/{job_id}`. Three of four routes are `NotImplementedError` stubs.
+- `app/config.py` — pydantic-settings: `ANTHROPIC_API_KEY`, `REWORD_MODEL`
+- `app/llm.py` — lazy singleton Anthropic client
+- `app/main.py` — FastAPI app with 4 routes: `/`, `/upload`, `/generate/{job_id}/{problem_idx}` (all implemented), `/download/{job_id}` (Phase 4 stub)
 - `app/models.py` — pydantic models: `Problem`, `ParameterConstraint`, `Invariant`, `Template`, `Variant`. **These shapes are the contract between pipeline stages.**
+- `app/jobs.py` — in-memory job store keyed by UUID
 - `app/pipeline/__init__.py` (empty)
 - `app/pipeline/extract.py` — `docx_to_latex(path) -> str` via pypandoc
 - `app/pipeline/parse.py` — `latex_to_problems(latex) -> list[Problem]`; handles pandoc's multi-block enumerate structure and free-text sub-parts
 - `app/pipeline/generate.py` — `sample_parameters(template, max_attempts) -> Variant`; per-template sampler registry
 - `app/pipeline/verify.py` — `verify(template, params) -> Variant`; SymPy gate, evaluates all invariants
+- `app/pipeline/prose.py` — `render_prose(variant, template) -> Variant`; substitutes parameters into `prose_template`
+- `app/pipeline/reword.py` — `reword_surface(variant, template) -> Variant`; LLM rewording with math preservation check and graceful fallback
 - `app/pipeline/templates_library/__init__.py` (empty)
 - `app/pipeline/templates_library/rational_business_profit.py` — hand-written `Template` for the rational-business-profit problem type
+- `app/templates/` — Jinja2 HTML templates: `base.html`, `upload.html`, `review.html`, `partials/variant_card.html`
+- `app/static/style.css`
 - `tests/__init__.py` (empty)
 - `tests/test_phase1.py` — 13 acceptance tests covering all Phase 1 stages (all passing)
+- `tests/test_phase2.py` — 18 acceptance tests covering UI routes and prose rendering
+- `tests/test_phase3.py` — tests for reword pipeline (mocked LLM)
 - `tests/fixtures/` — `.docx` exam files from the teacher
+- `.env.example` — documents required environment variables
 
 ### Files NOT yet created
 
-- `app/config.py` — pydantic-settings for `ANTHROPIC_API_KEY` etc.
-- `app/llm.py` — Anthropic client wrapper
-- `app/templates/` — Jinja2 HTML templates
-- `app/static/` — CSS, optionally KaTeX bundle
-- `.env.example`
+- `app/pipeline/render.py` — `variants_to_docx()` for Phase 4 output
+- `app/pipeline/template.py` — `extract_template()` LLM-based template extraction for Phase 5
 
 ### Test fixtures (the user has these locally; copy into `tests/fixtures/`)
 
@@ -167,7 +174,7 @@ Front-loaded with deterministic, testable pieces. LLM-dependent stages come last
 
 **End of Phase 1** ✅: full pipeline minus LLM works on derivadas2 problem 1. 13 tests passing. No UI yet.
 
-### Phase 2 — UI shell
+### Phase 2 — UI shell ✅ COMPLETE
 
 **2.1 `app/templates/base.html`, `upload.html`, `review.html`** — Jinja2, HTMX-driven. KaTeX (CDN, `https://cdn.jsdelivr.net/npm/katex@0.16.x/dist/`) for math rendering on the page.
 
@@ -175,18 +182,21 @@ Front-loaded with deterministic, testable pieces. LLM-dependent stages come last
 
 **2.3 In-memory job store keyed by UUID** — no database needed for v1. Jobs expire after 1 hour. Document the decision; persistence can come later.
 
-**End of Phase 2**: teacher can upload derivadas2.docx, see problem 1 with a generated variant, click regenerate to get a different variant.
+**End of Phase 2** ✅: teacher can upload derivadas2.docx, see problem 1 with a generated variant, click regenerate to get a different variant.
 
-### Phase 3 — Surface text rewording
+### Phase 3 — Surface text rewording ✅ COMPLETE
 
-**3.1 `app/llm.py`** — minimal Anthropic client wrapper, `claude-opus-4-7` model (or sonnet for cost — sonnet is fine for rewording). Use `ANTHROPIC_API_KEY` from env.
+**3.1 `app/config.py`** — pydantic-settings for `ANTHROPIC_API_KEY` and `REWORD_MODEL`. `.env.example` documents required vars.
 
-**3.2 `app/pipeline/reword.py`**
+**3.2 `app/llm.py`** — lazy singleton Anthropic client; raises `RuntimeError` with a helpful message if the API key is not configured.
+
+**3.3 `app/pipeline/reword.py`**
 - Function: `reword_surface(variant: Variant, template: Template, language: str = "es") -> Variant`
-- LLM call. Prompt: "Here is the original prose template and the new parameter values. Vary only the surface text — variable names, applied context (e.g., 'company' → 'factory'), units. Do NOT change any mathematical expressions or numbers. Return the rewritten prose."
-- Pass `template.prose_template` and `variant.parameters` as context
-- Result goes into `variant.rendered_prose_latex`
-- Verify post-condition: the LaTeX equations in the output match those produced by parameter substitution. If LLM modified the math, reject.
+- LLM call using `claude-haiku-4-5` (cheapest model; accurate enough for surface rewording). System prompt is prompt-cached to reduce token costs on repeated calls.
+- Prompt instructs the model to keep all `\(...\)` LaTeX blocks verbatim while varying the applied context (e.g., "empresa" → "fábrica", "beneficios" → "producción").
+- Post-condition: `_math_preserved()` extracts all math blocks from mechanical prose and LLM output and asserts they are identical. If the LLM altered any math, the output is rejected and mechanical prose is used.
+- Falls back to mechanical prose silently on any error (missing key, network, rate limit) so the pipeline is never blocked.
+- Integrated automatically into `/upload` and `/generate` routes — the variant card always shows reworded prose when the API key is set.
 
 ### Phase 4 — Output
 

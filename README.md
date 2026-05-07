@@ -26,8 +26,8 @@ Verification is the gate — no variant reaches the teacher unless `Variant.veri
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | Deterministic foundation (extract, parse, verify, generate) | ✅ Done |
-| 2 | UI shell (upload, review page, HTMX) | Planned |
-| 3 | Surface text rewording via LLM | Planned |
+| 2 | UI shell (upload, review page, HTMX regenerate) | ✅ Done |
+| 3 | Surface text rewording via LLM | ✅ Done |
 | 4 | .docx output via python-docx + pandoc | Planned |
 | 5 | LLM-based template extraction | Planned |
 
@@ -45,6 +45,10 @@ uv sync --group dev
 
 # Run the test suite
 uv run pytest tests/ -v
+
+# (Optional) Set your Anthropic API key for surface text rewording
+cp .env.example .env
+# Edit .env and add your ANTHROPIC_API_KEY
 
 # Start the dev server
 uv run uvicorn app.main:app --reload
@@ -71,5 +75,5 @@ This is intentional; persistence will be added (SQLite → Postgres) when it bec
 - **Math engine** — SymPy
 - **Doc parsing** — pypandoc (system pandoc binary)
 - **Doc output** — python-docx + pandoc
-- **LLM** — Anthropic Claude (sonnet for rewording, opus for template extraction)
+- **LLM** — Anthropic Claude (haiku for rewording, opus for template extraction)
 - **Deployment** — Fly.io, Madrid region (`mad`), scale-to-zero
