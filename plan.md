@@ -117,14 +117,14 @@ This worked example should be the v0 acceptance test: upload `derivadas2.docx`, 
 - `tests/test_phase1.py` — 13 acceptance tests covering all Phase 1 stages (all passing)
 - `tests/test_phase2.py` — 18 acceptance tests covering UI routes and prose rendering
 - `app/pipeline/render.py` — `variants_to_docx()` builds a LaTeX document and calls pandoc to produce a `.docx`
+- `app/pipeline/template.py` — `extract_template()` LLM-based template extraction with SymPy sanity check and parameter bound inference
 - `tests/test_phase3.py` — tests for reword pipeline (mocked LLM)
 - `tests/test_phase4.py` — tests for render pipeline and `/download` route
+- `tests/test_phase5.py` — tests for template extraction and generic sampler (mocked LLM)
 - `tests/fixtures/` — `.docx` exam files from the teacher
 - `.env.example` — documents required environment variables
 
-### Files NOT yet created
-
-- `app/pipeline/template.py` — `extract_template()` LLM-based template extraction for Phase 5
+### All planned files created ✅
 
 ### Test fixtures (the user has these locally; copy into `tests/fixtures/`)
 
@@ -213,13 +213,26 @@ Front-loaded with deterministic, testable pieces. LLM-dependent stages come last
 - Response includes a human-readable filename (`{original_stem}_variante.docx`) in `Content-Disposition`.
 - Download button added to the review page header.
 
-### Phase 5 — LLM template extraction (hardest, last)
+### Phase 5 — LLM template extraction ✅ COMPLETE
 
 **5.1 `app/pipeline/template.py`**
-- Function: `extract_template(problem: Problem) -> Template`
-- LLM call. The system prompt describes what a Template is, includes 1-2 hand-written examples (few-shot), and asks for structured output (use Anthropic's tool-use feature for guaranteed schema-conformant JSON, or pydantic + repair).
-- The output Template is then run through `verify` against the *original* parameters as a sanity check — if the LLM's extracted template doesn't even validate the original, reject the template.
-- This is the messy part. Real exams have problem types we won't have templates for; the LLM has to infer the structure. Expect this to require iteration.
+- Function: `extract_template(problem: Problem) -> Template | None`
+- Calls `claude-sonnet-4-6` with Anthropic's tool-use feature so the response is guaranteed to match our pydantic schema (no JSON parsing / repair needed).
+- System prompt (~2.5 KB) explains the Template structure with the rational-business-profit problem as a worked example. The prompt is prompt-cached so repeated calls in a session amortise the cost.
+- After the LLM returns, the extracted template is run through `verify()` against the original numerical parameters provided by the model. If a single invariant fails on the source values, the LLM made a structural mistake and the template is rejected.
+- Bound inference: after passing the sanity check, parameter constraints are post-processed so each parameter's `min`/`max` brackets the original value (default ±4×|original|, with a floor of ±30). This lets the generic brute-force sampler search a productive region of parameter space rather than the default `[-30, 30]` cube.
+- Falls back to None on any failure (missing API key, network, schema mismatch, verification rejection) so the pipeline degrades gracefully.
+
+**5.2 Generic brute-force sampler**
+- `app/pipeline/generate.py::_generic_sampler()` is the fallback when no per-template sampler is registered. Uses random integer search over the parameter constraints (sign + min/max).
+- Default budget is 50× the per-template budget (≥ 2500 attempts) because LLM-extracted templates often have restrictive invariants like "f' has integer critical point" that need many tries.
+- Known limitation: very tightly constrained templates (e.g. 6+ invariants involving solve(diff(...))) may exhaust the budget on subsequent regenerations. v1 accepts this — the teacher edits manually when no variant can be generated. A smarter solver (z3, smt) is post-v1 work.
+
+**5.3 Integration with `/upload`**
+- `_find_template()` (library heuristic) is tried first — fastest, highest quality, hand-tuned per template.
+- If no library template matches, `extract_template()` is the fallback. Each LLM call adds ~3-10 seconds to upload time; the cost is acceptable for v1.
+
+**End of Phase 5** ✅: every problem in an uploaded exam attempts to get a verified variant. Variants either come from a library template (best path), an LLM-extracted template that passes verification (good path), or fall through to "edit manually" (graceful degradation).
 
 ## Stack & deployment
 

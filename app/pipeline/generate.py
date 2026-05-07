@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import random
 
-from app.models import Template, Variant
+from app.models import ParameterConstraint, Template, Variant
 from app.pipeline.verify import verify
 
 # Registry mapping template_id → sampler function.
@@ -34,13 +34,57 @@ def register_sampler(template_id: str):
 
 
 def sample_parameters(template: Template, max_attempts: int = 50) -> Variant:
-    """Return a verified Variant for *template*, or raise RuntimeError."""
+    """Return a verified Variant for *template*, or raise RuntimeError.
+
+    If a hand-written sampler is registered for ``template.template_id`` it
+    is used (smart, problem-specific). Otherwise the generic brute-force
+    sampler is invoked — useful for LLM-extracted templates.
+    """
     sampler = _SAMPLERS.get(template.template_id)
-    if sampler is None:
-        raise NotImplementedError(
-            f"No sampler registered for template '{template.template_id}'"
-        )
-    return sampler(template, max_attempts)
+    if sampler is not None:
+        return sampler(template, max_attempts)
+    # LLM-extracted templates have no smart parameterisation — invariants
+    # like "f' has integer critical point" are restrictive, so we need a
+    # much larger budget than for hand-written templates.
+    return _generic_sampler(template, max_attempts=max(max_attempts * 50, 2500))
+
+
+# ── generic brute-force sampler (LLM-extracted templates) ────────────────────
+
+def _random_value(c: ParameterConstraint) -> int | float:
+    """Sample a value satisfying *c*'s sign / min / max / type constraints."""
+    lo, hi = -30, 30
+    if c.sign == "positive":
+        lo = 1
+    elif c.sign == "negative":
+        hi = -1
+
+    if c.min is not None:
+        lo = max(lo, int(c.min))
+    if c.max is not None:
+        hi = min(hi, int(c.max))
+
+    if lo > hi:  # nonsense constraint — fall back to a single point
+        return lo
+
+    if c.type == "int":
+        return random.randint(lo, hi)
+    return round(random.uniform(lo, hi), 4)
+
+
+def _generic_sampler(template: Template, max_attempts: int) -> Variant:
+    """Random integer search over parameter space until verify() succeeds."""
+    for _ in range(max_attempts):
+        params = {c.name: _random_value(c) for c in template.parameters}
+        variant = verify(template, params)
+        if variant.verified:
+            return variant
+
+    raise RuntimeError(
+        f"Generic sampler exhausted {max_attempts} attempts for "
+        f"'{template.template_id}'. The template's invariants may be too "
+        f"restrictive for blind random search."
+    )
 
 
 # ── rational_business_profit sampler ─────────────────────────────────────────
