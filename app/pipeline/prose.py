@@ -20,28 +20,29 @@ import re
 from app.models import Template, Variant
 
 
-def render_prose(variant: Variant, template: Template) -> Variant:
-    """Return a copy of *variant* with rendered_prose_latex filled in."""
-    prose = template.prose_template
-    params = variant.parameters
-
+def _substitute(text: str, params: dict) -> str:
+    """Replace {{param}} placeholders, unescape {{ / }}, fix sign artifacts."""
     def _replace(m: re.Match) -> str:
         name = m.group(1)
         if name not in params:
             return m.group(0)
         val = params[name]
-        # Emit an integer string when the value is a whole number.
         if isinstance(val, float) and val == int(val):
             val = int(val)
         return str(val)
 
-    # Step 1: replace {{param_name}} with the parameter value.
-    prose = re.sub(r"\{\{(\w+)\}\}", _replace, prose)
+    text = re.sub(r"\{\{(\w+)\}\}", _replace, text)
+    text = text.replace("{{", "{").replace("}}", "}")
+    text = text.replace("+ -", "- ").replace("- -", "+ ")
+    return text
 
-    # Step 2: unescape remaining {{ / }} → { / }.
-    prose = prose.replace("{{", "{").replace("}}", "}")
 
-    # Step 3: clean up sign artifacts from negative substitutions.
-    prose = prose.replace("+ -", "- ").replace("- -", "+ ")
-
-    return variant.model_copy(update={"rendered_prose_latex": prose})
+def render_prose(variant: Variant, template: Template) -> Variant:
+    """Return a copy of *variant* with rendered_prose_latex and rendered_sub_parts filled in."""
+    params = variant.parameters
+    prose = _substitute(template.prose_template, params)
+    sub_parts = [_substitute(task, params) for task in template.student_tasks]
+    return variant.model_copy(update={
+        "rendered_prose_latex": prose,
+        "rendered_sub_parts": sub_parts,
+    })

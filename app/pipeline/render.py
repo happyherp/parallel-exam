@@ -65,11 +65,11 @@ def _build_latex(
             parts.append(var.rendered_prose_latex)
             parts.append("")
 
-            if tmpl and tmpl.student_tasks:
-                for j, task in enumerate(tmpl.student_tasks):
-                    label = chr(ord("a") + j)
-                    parts.append(f"{label}) {_escape(task)}")
-                    parts.append("")
+            sub_parts = var.rendered_sub_parts or (tmpl.student_tasks if tmpl else [])
+            for j, task in enumerate(sub_parts):
+                label = chr(ord("a") + j)
+                parts.append(f"{label}) {_escape(task)}")
+                parts.append("")
         else:
             # No variant — pass the original problem through unchanged.
             parts.append(problem.prose_latex)

@@ -48,6 +48,7 @@ class Template(BaseModel):
     invariants: list[Invariant]
     prose_template: str              # Jinja-style with {{a}}, {{b}}, {{c}} placeholders
     student_tasks: list[str]         # the sub-questions, language-agnostic placeholders
+    match_keywords: list[str] = Field(default_factory=list)  # required words in prose for library match
 
 
 class Variant(BaseModel):
@@ -56,5 +57,6 @@ class Variant(BaseModel):
     template_id: str
     parameters: dict[str, int | float]
     rendered_prose_latex: str
+    rendered_sub_parts: list[str] = []   # reworded student tasks (a)/b)/c) questions)
     verification: dict[str, str]     # invariant name → computed value as string
     verified: bool

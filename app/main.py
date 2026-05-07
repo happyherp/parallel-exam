@@ -13,7 +13,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.jobs import create_job, get_job
-from app.models import Template
 from app.pipeline.extract import docx_to_latex
 from app.pipeline.generate import sample_parameters
 from app.pipeline.parse import latex_to_problems
@@ -21,28 +20,30 @@ from app.pipeline.prose import render_prose
 from app.pipeline.render import variants_to_docx
 from app.pipeline.reword import reword_surface
 from app.pipeline.template import extract_template
-from app.pipeline.templates_library.rational_business_profit import (
-    RATIONAL_BUSINESS_PROFIT,
-)
+from app.pipeline.templates_library import LIBRARY
 
 BASE_DIR = Path(__file__).parent
 jinja = Jinja2Templates(directory=BASE_DIR / "templates")
+
+# Convert the small subset of LaTeX text-mode commands that pandoc emits into HTML.
+def _latex_prose_filter(text: str) -> str:
+    text = re.sub(r"\\textsuperscript\{([^}]*)\}", r"<sup>\1</sup>", text)
+    text = re.sub(r"\\textsubscript\{([^}]*)\}", r"<sub>\1</sub>", text)
+    return text
+
+jinja.env.filters["latex_prose"] = _latex_prose_filter
 
 app = FastAPI(title="Parallel Exam Generator")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 
-# ── Template library (v1: one hand-written template) ─────────────────────────
+# ── Template library ─────────────────────────────────────────────────────────
 
 def _find_template(prose_latex: str) -> Template | None:
-    """Return the first matching Template from the library, or None.
-
-    v1 heuristic: detect rational-function-over-quadratic by looking for
-    \\frac{...x...}{x^{2}...} in the problem prose. Only one template in
-    the library so far; extend this as the library grows.
-    """
-    if re.search(r"\\frac\{[^}]*x[^}]*\}\{x\^\{2\}", prose_latex):
-        return RATIONAL_BUSINESS_PROFIT
+    """Return the first matching library Template, or None."""
+    for tmpl, matcher in LIBRARY:
+        if matcher(prose_latex):
+            return tmpl
     return None
 
 
@@ -87,24 +88,30 @@ async def upload(request: Request, file: UploadFile = File(...)):
         tmp_path.unlink(missing_ok=True)
 
     if not problems:
+        # Equation Editor 3.0 (OLE objects) produces no parseable LaTeX math.
+        # Heuristic: pandoc output has text but almost no \( math delimiters.
+        math_count = latex.count(r"\(")
+        extra = (
+            " Parece que el documento usa las Ecuaciones antiguas de Word"
+            " (Equation Editor 3.0). Ábrelo en LibreOffice Writer, ve a"
+            " Archivo → Guardar como → .docx, y vuelve a subir el archivo convertido."
+            if math_count < 2
+            else ""
+        )
         return jinja.TemplateResponse(
             request,
             "upload.html",
-            {"error": "No se encontraron problemas numerados en el documento."},
+            {"error": f"No se encontraron problemas numerados en el documento.{extra}"},
             status_code=422,
         )
 
-    # Match templates and generate initial variants.
+    # Match against the hand-written library (fast, deterministic).
+    # LLM-based extraction is deferred to the first /generate call for each problem.
     templates: dict[int, object] = {}
     variants: dict[int, object] = {}
 
     for i, problem in enumerate(problems):
-        # 1. Try the hand-written library first (fastest, highest quality).
         tmpl = _find_template(problem.prose_latex)
-        # 2. Fall back to LLM-based template extraction. Returns None if the
-        #    API key is missing or the extracted template fails verification.
-        if tmpl is None:
-            tmpl = extract_template(problem)
         templates[i] = tmpl
         if tmpl is not None:
             try:
@@ -129,14 +136,28 @@ async def upload(request: Request, file: UploadFile = File(...)):
 
 @app.post("/generate/{job_id}/{problem_idx}", response_class=HTMLResponse)
 async def generate_variant(request: Request, job_id: str, problem_idx: int):
-    """HTMX endpoint — return a fresh variant card partial for one problem."""
+    """HTMX endpoint — return a fresh variant card partial for one problem.
+
+    If no template is stored yet (lazy-load path), tries LLM extraction first.
+    """
     job = get_job(job_id)
     if job is None:
         return HTMLResponse("<p>Sesión no encontrada. Vuelve a subir el archivo.</p>", status_code=404)
 
     tmpl = job.templates.get(problem_idx)
+
+    # Lazy LLM extraction: only runs when the user clicks "Generar variante".
     if tmpl is None:
-        return HTMLResponse("<p>No hay plantilla para este problema.</p>", status_code=400)
+        problem = job.problems[problem_idx]
+        tmpl = extract_template(problem)
+        job.templates[problem_idx] = tmpl
+
+    if tmpl is None:
+        return HTMLResponse(
+            "<p>No se pudo extraer una plantilla para este problema."
+            " Edítalo manualmente.</p>",
+            status_code=400,
+        )
 
     try:
         variant = sample_parameters(tmpl)

@@ -34,17 +34,22 @@ REGLAS OBLIGATORIAS:
 2. Cambia únicamente las palabras que describen el contexto real (la empresa,
    los beneficios, la unidad de tiempo, etc.). Usa un contexto diferente al
    original (no vuelvas a usar "empresa" ni "beneficios").
-3. Mantén el mismo nivel académico y el idioma español de España.
-4. Responde ÚNICAMENTE con el texto reformulado. Sin explicaciones, sin
-   comillas adicionales, sin preamble.\
+3. Si el input incluye una sección "---PREGUNTAS---", reformula también las
+   preguntas para que el contexto sea coherente con el enunciado reformulado.
+   Mantén la misma estructura: un ítem por línea con la misma etiqueta (a), b)…).
+4. Mantén el mismo nivel académico y el idioma español de España.
+5. Responde ÚNICAMENTE con el texto reformulado (con "---PREGUNTAS---" si lo
+   había). Sin explicaciones, sin comillas adicionales, sin preamble.\
 """
 
 _USER_TEMPLATE = """\
 Reformula el siguiente enunciado cambiando el contexto aplicado. \
 Mantén todas las expresiones matemáticas LaTeX idénticas.
 
-{prose}\
+{content}\
 """
+
+_TASKS_SEPARATOR = "---PREGUNTAS---"
 
 
 # ── Math preservation check ───────────────────────────────────────────────────
@@ -69,14 +74,25 @@ def reword_surface(
     template: Template,  # noqa: ARG001 — reserved for future per-template hints
     language: str = "es",  # noqa: ARG001 — reserved for multi-language support
 ) -> Variant:
-    """Return *variant* with varied surface prose, or the original on any failure.
+    """Return *variant* with varied surface prose (and sub-parts), or the original on failure.
 
-    Calls the Anthropic API. Falls back to mechanical prose silently so the
-    pipeline is never blocked by an LLM error or missing API key.
+    When rendered_sub_parts is non-empty the sub-questions are sent together
+    with the main prose so the LLM can keep context consistent across both.
+    Falls back to mechanical values silently on any error or bad output.
     """
     mechanical_prose = variant.rendered_prose_latex
+    mechanical_tasks = variant.rendered_sub_parts
     if not mechanical_prose:
         return variant
+
+    # Build combined input when sub-questions exist.
+    if mechanical_tasks:
+        tasks_block = "\n".join(
+            f"{chr(ord('a') + i)}) {t}" for i, t in enumerate(mechanical_tasks)
+        )
+        content = f"{mechanical_prose}\n{_TASKS_SEPARATOR}\n{tasks_block}"
+    else:
+        content = mechanical_prose
 
     try:
         client = get_client()
@@ -87,25 +103,48 @@ def reword_surface(
                 {
                     "type": "text",
                     "text": _SYSTEM_PROMPT,
-                    # Cache the static system prompt across repeated calls.
                     "cache_control": {"type": "ephemeral"},
                 }
             ],
             messages=[
                 {
                     "role": "user",
-                    "content": _USER_TEMPLATE.format(prose=mechanical_prose),
+                    "content": _USER_TEMPLATE.format(content=content),
                 }
             ],
         )
-        reworded = response.content[0].text.strip()
+        raw = response.content[0].text.strip()
 
-        if not _math_preserved(mechanical_prose, reworded):
-            # LLM modified a math expression — reject to preserve correctness.
+        # Parse prose and (optionally) tasks from the response.
+        if mechanical_tasks and _TASKS_SEPARATOR in raw:
+            prose_part, tasks_part = raw.split(_TASKS_SEPARATOR, 1)
+            reworded_prose = prose_part.strip()
+            reworded_tasks = [
+                re.sub(r"^[a-z]\)\s*", "", line.strip())
+                for line in tasks_part.strip().splitlines()
+                if line.strip()
+            ]
+            # If task count changed, the LLM mangled the structure — reject.
+            if len(reworded_tasks) != len(mechanical_tasks):
+                return variant
+        elif not mechanical_tasks:
+            reworded_prose = raw
+            reworded_tasks = []
+        else:
+            # Expected separator not found — reject.
             return variant
 
-        return variant.model_copy(update={"rendered_prose_latex": reworded})
+        if not _math_preserved(mechanical_prose, reworded_prose):
+            return variant
+        if mechanical_tasks and not _math_preserved(
+            " ".join(mechanical_tasks), " ".join(reworded_tasks)
+        ):
+            return variant
+
+        return variant.model_copy(update={
+            "rendered_prose_latex": reworded_prose,
+            "rendered_sub_parts": reworded_tasks,
+        })
 
     except Exception:
-        # Missing API key, network error, rate limit, etc. — degrade gracefully.
         return variant

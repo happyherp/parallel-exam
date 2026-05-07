@@ -2,7 +2,7 @@
    Context: variant (Variant), template (Template), job_id (str), problem_idx (int) #}
 
 {% if variant %}
-  <div class="variant-prose">{{ variant.rendered_prose_latex | safe }}</div>
+  <div class="variant-prose">{{ variant.rendered_prose_latex | latex_prose | safe }}</div>
 
   <div class="verification-table">
     {% for desc, val in variant.verification.items() %}
@@ -14,10 +14,11 @@
     {% endfor %}
   </div>
 
-  {% if template and template.student_tasks %}
+  {% set tasks = variant.rendered_sub_parts if variant.rendered_sub_parts else (template.student_tasks if template else []) %}
+  {% if tasks %}
   <div class="student-tasks">
-    {% for task in template.student_tasks %}
-    <div>{{ loop.index }}) {{ task }}</div>
+    {% for task in tasks %}
+    <div>{{ loop.index }}) {{ task | latex_prose | safe }}</div>
     {% endfor %}
   </div>
   {% endif %}
