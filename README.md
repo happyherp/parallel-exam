@@ -28,7 +28,7 @@ Verification is the gate — no variant reaches the teacher unless `Variant.veri
 | 1 | Deterministic foundation (extract, parse, verify, generate) | ✅ Done |
 | 2 | UI shell (upload, review page, HTMX regenerate) | ✅ Done |
 | 3 | Surface text rewording via LLM | ✅ Done |
-| 4 | .docx output via python-docx + pandoc | Planned |
+| 4 | .docx output via pandoc-reverse + /download route | ✅ Done |
 | 5 | LLM-based template extraction | Planned |
 
 ## Quick start

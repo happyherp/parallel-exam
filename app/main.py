@@ -7,7 +7,8 @@ import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.background import BackgroundTasks
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -17,6 +18,7 @@ from app.pipeline.extract import docx_to_latex
 from app.pipeline.generate import sample_parameters
 from app.pipeline.parse import latex_to_problems
 from app.pipeline.prose import render_prose
+from app.pipeline.render import variants_to_docx
 from app.pipeline.reword import reword_surface
 from app.pipeline.templates_library.rational_business_profit import (
     RATIONAL_BUSINESS_PROFIT,
@@ -150,7 +152,30 @@ async def generate_variant(request: Request, job_id: str, problem_idx: int):
     )
 
 
-@app.get("/download/{job_id}", response_class=HTMLResponse)
-async def download(job_id: str):
-    """Render approved variants to a new .docx and return it. (Phase 4)"""
-    raise NotImplementedError
+@app.get("/download/{job_id}")
+async def download(job_id: str, background_tasks: BackgroundTasks):
+    """Render current variants to a .docx and stream it to the browser."""
+    job = get_job(job_id)
+    if job is None:
+        return HTMLResponse("Sesión no encontrada. Vuelve a subir el archivo.", status_code=404)
+
+    # Write to a named temp file; FileResponse streams it, then we delete it.
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as fh:
+        out_path = Path(fh.name)
+
+    try:
+        variants_to_docx(job.problems, job.templates, job.variants, out_path)
+    except Exception as exc:
+        out_path.unlink(missing_ok=True)
+        return HTMLResponse(f"Error al generar el documento: {exc}", status_code=500)
+
+    stem = Path(job.filename).stem
+    download_name = f"{stem}_variante.docx"
+
+    background_tasks.add_task(out_path.unlink, missing_ok=True)
+
+    return FileResponse(
+        path=out_path,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=download_name,
+    )

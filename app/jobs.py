@@ -10,8 +10,8 @@ process restarts after idle periods, which clears them automatically.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from app.models import Problem, Template, Variant
 
@@ -37,7 +37,7 @@ def create_job(
 ) -> Job:
     job = Job(
         job_id=str(uuid.uuid4()),
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         filename=filename,
         problems=problems,
         templates=templates,
