@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Revisión — {{ job.filename }}{% endblock %}
+
+{% block header_sub %}
+<div class="subtitle">{{ job.filename }}</div>
+{% endblock %}
+
+{% block content %}
+<div class="review-header">
+  <h2>Problemas extraídos</h2>
+  <span class="meta">{{ job.problems | length }} problema{{ 's' if job.problems | length != 1 else '' }}</span>
+  <a href="/" class="btn btn-secondary btn-sm">← Subir otro</a>
+</div>
+
+{% for problem in job.problems %}
+{% set i = loop.index0 %}
+<div class="problem-card">
+  <div class="problem-header">
+    <span class="prob-num">Problema {{ problem.number }}</span>
+    {% if problem.points is not none %}
+    <span class="prob-pts">{{ problem.points | int if problem.points == problem.points | int else problem.points }} puntos</span>
+    {% endif %}
+  </div>
+
+  <div class="problem-body">
+    <!-- Original -->
+    <div class="problem-col">
+      <div class="col-label">Original</div>
+      <div class="prose">{{ problem.prose_latex | safe }}</div>
+      {% if problem.sub_parts %}
+      <div class="subparts">
+        {% for part in problem.sub_parts %}
+        <div>{{ part | safe }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Variant or no-template notice -->
+    <div class="problem-col">
+      <div class="col-label">Variante generada</div>
+
+      {% if job.templates[i] %}
+        <div id="variant-{{ i }}">
+          {% with variant=job.variants[i], template=job.templates[i], job_id=job.job_id, problem_idx=i %}
+            {% include 'partials/variant_card.html' %}
+          {% endwith %}
+        </div>
+      {% else %}
+        <p class="no-template-msg">Sin plantilla disponible para este tipo de problema — editar manualmente.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}
