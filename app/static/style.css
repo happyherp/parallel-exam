@@ -1,0 +1,260 @@
+/* ── Reset & base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 1rem;
+    line-height: 1.6;
+    color: #1a1a1a;
+    background: #f5f5f5;
+    min-height: 100vh;
+}
+
+/* ── Layout ── */
+.container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+}
+
+header {
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 1rem 0;
+    margin-bottom: 2rem;
+}
+
+header h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #111;
+}
+
+header .subtitle {
+    font-size: 0.875rem;
+    color: #666;
+    margin-top: 0.25rem;
+}
+
+/* ── Upload page ── */
+.upload-card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 2.5rem;
+    max-width: 480px;
+    margin: 3rem auto;
+    text-align: center;
+}
+
+.upload-card h2 {
+    font-size: 1.2rem;
+    margin-bottom: 0.5rem;
+}
+
+.upload-card p {
+    color: #555;
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+}
+
+.file-input-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+}
+
+input[type="file"] {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    width: 100%;
+    cursor: pointer;
+}
+
+.btn {
+    display: inline-block;
+    padding: 0.55rem 1.4rem;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    text-decoration: none;
+    transition: background 0.15s;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: #fff;
+}
+
+.btn-primary:hover { background: #1d4ed8; }
+
+.btn-secondary {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.btn-secondary:hover { background: #d1d5db; }
+
+.btn-sm {
+    padding: 0.35rem 0.9rem;
+    font-size: 0.85rem;
+}
+
+.error-msg {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+/* ── Review page ── */
+.review-header {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.review-header h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.review-header .meta {
+    font-size: 0.85rem;
+    color: #666;
+}
+
+/* ── Problem cards ── */
+.problem-card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+}
+
+.problem-header {
+    background: #f9fafb;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 0.6rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.problem-header .prob-num {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.problem-header .prob-pts {
+    font-size: 0.8rem;
+    color: #666;
+    background: #e5e7eb;
+    border-radius: 4px;
+    padding: 0.1rem 0.5rem;
+}
+
+.problem-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+}
+
+.problem-col {
+    padding: 1rem 1.25rem;
+}
+
+.problem-col + .problem-col {
+    border-left: 1px solid #e0e0e0;
+}
+
+.col-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin-bottom: 0.5rem;
+}
+
+.prose {
+    font-size: 0.92rem;
+    line-height: 1.7;
+}
+
+.subparts {
+    margin-top: 0.75rem;
+    padding-left: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.88rem;
+}
+
+/* ── Variant card ── */
+.variant-prose {
+    font-size: 0.92rem;
+    line-height: 1.7;
+    margin-bottom: 0.75rem;
+}
+
+.verification-table {
+    font-size: 0.78rem;
+    color: #555;
+    margin-bottom: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.verification-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+}
+
+.verification-row .tick { color: #16a34a; }
+.verification-row .key { color: #4b5563; }
+.verification-row .val { font-weight: 600; color: #111; font-family: monospace; }
+
+.student-tasks {
+    margin-top: 0.75rem;
+    padding-left: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.88rem;
+    color: #374151;
+}
+
+.no-template-msg {
+    font-size: 0.88rem;
+    color: #9ca3af;
+    font-style: italic;
+}
+
+.regen-row {
+    margin-top: 0.75rem;
+}
+
+/* ── Loading indicator ── */
+.htmx-indicator {
+    display: none;
+    font-size: 0.8rem;
+    color: #6b7280;
+    margin-left: 0.5rem;
+}
+
+.htmx-request .htmx-indicator { display: inline; }
+.htmx-request.htmx-indicator { display: inline; }

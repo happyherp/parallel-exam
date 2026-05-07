@@ -1,0 +1,45 @@
+{# Rendered by both review.html (initial load) and /generate (HTMX swap).
+   Context: variant (Variant), template (Template), job_id (str), problem_idx (int) #}
+
+{% if variant %}
+  <div class="variant-prose">{{ variant.rendered_prose_latex | safe }}</div>
+
+  <div class="verification-table">
+    {% for desc, val in variant.verification.items() %}
+    <div class="verification-row">
+      <span class="tick">✓</span>
+      <span class="key">{{ desc }}:</span>
+      <span class="val">{{ val }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if template and template.student_tasks %}
+  <div class="student-tasks">
+    {% for task in template.student_tasks %}
+    <div>{{ loop.index }}) {{ task }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="regen-row">
+    <button class="btn btn-secondary btn-sm"
+            hx-post="/generate/{{ job_id }}/{{ problem_idx }}"
+            hx-target="#variant-{{ problem_idx }}"
+            hx-swap="innerHTML">
+      Regenerar
+    </button>
+    <span class="htmx-indicator">Generando…</span>
+  </div>
+{% else %}
+  <p class="no-template-msg">No se pudo generar una variante para este problema.</p>
+  <div class="regen-row">
+    <button class="btn btn-secondary btn-sm"
+            hx-post="/generate/{{ job_id }}/{{ problem_idx }}"
+            hx-target="#variant-{{ problem_idx }}"
+            hx-swap="innerHTML">
+      Intentar de nuevo
+    </button>
+    <span class="htmx-indicator">Generando…</span>
+  </div>
+{% endif %}
