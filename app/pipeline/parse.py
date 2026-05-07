@@ -1,22 +1,24 @@
 """Stage 2: parse a pandoc-generated LaTeX string into Problem objects.
 
-Pandoc's LaTeX output for a numbered-list docx uses this structure:
+Two document styles are supported:
 
+Style A — numbered enumerate (derivadas2 style):
     \\begin{enumerate}
     \\def\\labelenumi{...}
-    [\\setcounter{enumi}{N}]    <- present when restarting from N+1
+    [\\setcounter{enumi}{N}]
     \\item
       \\emph{\\textbf{(X puntos)}} Prose text ...
-    [\\item ...]
     \\end{enumerate}
+    a) Sub-part ...   <- free paragraphs after the block
 
-    a) Sub-part text ...        <- free paragraphs between enumerate blocks
-    b) ...
+Style B — textbf heading (analisis 1º Bach style):
+    \\textbf{Problema N.} (X puntos) Prose text ...
 
-Multiple enumerate blocks appear in sequence; setcounter tells us which
-problem number the next \\item represents.  Sub-parts appear as free text
-after the block that owns them (i.e. they belong to the last item in the
-preceding block).
+    [\\begin{enumerate}...\\end{enumerate}  OR  a) ... b) ...]
+
+    \\textbf{Problema N+1.} ...
+
+Detection: if the document contains \\textbf{Problema, Style B is used.
 """
 
 from __future__ import annotations
@@ -34,6 +36,17 @@ _POINTS_RE = re.compile(
 )
 _SETCOUNTER_RE = re.compile(r"\\setcounter\{enumi\}\{(\d+)\}")
 _SUBPART_RE = re.compile(r"(?m)^([a-z]\))\s*")
+
+# Style-B patterns (split on the full \textbf{Problema N.} token including closing brace)
+_PROBLEMA_HEADING_RE = re.compile(r"\\textbf\{Problema\s+(\d+)\.\}")
+_HEADING_POINTS_RE = re.compile(
+    r"^\s*\((\d+(?:[.,]\d+)?)\s*punt[oa]s?\)",
+    re.IGNORECASE,
+)
+_SUBPART_POINTS_RE = re.compile(
+    r"\(\d+(?:[.,]\d+)?\s*punt[oa]s?\)\s*",
+    re.IGNORECASE,
+)
 
 
 def _clean_item_prose(text: str) -> str:
@@ -78,7 +91,17 @@ def _parse_subparts(text: str) -> list[str]:
 # ── public API ────────────────────────────────────────────────────────────────
 
 def latex_to_problems(latex: str) -> list[Problem]:
-    """Parse pandoc LaTeX output into a list of Problem objects."""
+    """Parse pandoc LaTeX output into a list of Problem objects.
+
+    Dispatches to the appropriate parser based on detected document style.
+    """
+    if _PROBLEMA_HEADING_RE.search(latex):
+        return _parse_style_b(latex)
+    return _parse_style_a(latex)
+
+
+def _parse_style_a(latex: str) -> list[Problem]:
+    """Style A: problems are \\item entries inside \\begin{enumerate} blocks."""
     problems: list[Problem] = []
 
     enum_re = re.compile(
@@ -86,7 +109,6 @@ def latex_to_problems(latex: str) -> list[Problem]:
         re.DOTALL,
     )
 
-    # Walk the document as alternating (free_text, enum_block) segments.
     pos = 0
     for match in enum_re.finditer(latex):
         free_text = latex[pos : match.start()].strip()
@@ -100,7 +122,6 @@ def latex_to_problems(latex: str) -> list[Problem]:
         _parse_enum_block(match.group(1), problems)
         pos = match.end()
 
-    # Trailing free text after the last enumerate block.
     trailing = latex[pos:].strip()
     if trailing and problems:
         subparts = _parse_subparts(trailing)
@@ -108,6 +129,67 @@ def latex_to_problems(latex: str) -> list[Problem]:
             problems[-1] = problems[-1].model_copy(
                 update={"sub_parts": subparts}
             )
+
+    return problems
+
+
+def _parse_style_b(latex: str) -> list[Problem]:
+    """Style B: problems start with \\textbf{Problema N.} (X puntos) headings."""
+    problems: list[Problem] = []
+
+    # Split into segments, one per problem (keep the heading delimiter).
+    segments = _PROBLEMA_HEADING_RE.split(latex)
+    # segments = [preamble, "1", body1, "2", body2, ...]
+    i = 1
+    while i < len(segments):
+        number = int(segments[i])
+        body = segments[i + 1] if i + 1 < len(segments) else ""
+        i += 2
+
+        # After split, body starts with " (X puntos) prose..."
+        m_pts = _HEADING_POINTS_RE.match(body)
+        points = float(m_pts.group(1).replace(",", ".")) if m_pts else None
+
+        # Strip the points annotation to get pure prose.
+        prose = _HEADING_POINTS_RE.sub("", body, count=1).strip() if m_pts else body.strip()
+
+        # Separate inline enumerate block (if present) from trailing free text.
+        enum_re = re.compile(
+            r"\\begin\{enumerate\}(.*?)\\end\{enumerate\}",
+            re.DOTALL,
+        )
+        sub_parts: list[str] = []
+        enum_match = enum_re.search(prose)
+        if enum_match:
+            # Sub-parts are the \item entries inside the enumerate.
+            enum_body = enum_match.group(1)
+            raw_items = re.split(r"\\item", enum_body)
+            for raw in raw_items[1:]:
+                item_text = re.sub(r"\\def\\labelenumi\{[^}]*\}", "", raw)
+                item_text = re.sub(r"\\setcounter\{[^}]*\}\{[^}]*\}", "", item_text)
+                sub_parts.append(item_text.strip())
+            # Prose is everything before the enumerate block.
+            prose = prose[: enum_match.start()].strip()
+        else:
+            # Sub-parts may be free a) b) paragraphs; strip them from prose.
+            parts = _SUBPART_RE.split(prose.strip())
+            if len(parts) > 1:
+                prose = parts[0].strip()
+                j = 1
+                while j < len(parts):
+                    label = parts[j]
+                    body_part = parts[j + 1].strip() if j + 1 < len(parts) else ""
+                    sub_parts.append(f"{label} {body_part}")
+                    j += 2
+
+        problems.append(
+            Problem(
+                number=number,
+                points=points,
+                prose_latex=prose.strip(),
+                sub_parts=sub_parts,
+            )
+        )
 
     return problems
 
