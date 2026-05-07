@@ -4,6 +4,16 @@ Generate **parallel / equivalent variants** of math exams for make-up tests.
 A teacher writes a quiz; one student misses it; she needs an equivalent-but-different exam.
 This tool does that correctly — without changing the difficulty or breaking the math.
 
+## Demo
+
+Upload a `.docx` exam and the tool extracts each problem, generates a verified parallel variant, and lets you download the result:
+
+![Upload screen](docs/screenshots/upload.png)
+
+Once processed, you can review the original alongside the generated variant, check the verified constraints, and regenerate any problem individually:
+
+![Results screen](docs/screenshots/results.png)
+
 ## Why this is hard
 
 Existing AI tools fail in two ways: changes are too minor to defeat memorisation, or numbers are changed in ways that break the math (ugly fractions, no real solutions).
