@@ -204,7 +204,6 @@ def test_parse_analisis1_problem_numbers():
     assert [p.number for p in problems] == [1, 2, 3]
 
 
-@pytest.mark.xfail(reason="parser does not yet handle \\textbf{Problema N.} heading style")
 def test_parse_analisis1_problem_points():
     from app.pipeline.extract import docx_to_latex
     from app.pipeline.parse import latex_to_problems
@@ -216,7 +215,6 @@ def test_parse_analisis1_problem_points():
     assert problems[2].points == 2.0
 
 
-@pytest.mark.xfail(reason="parser does not yet handle \\textbf{Problema N.} heading style")
 def test_parse_analisis1_problem1_prose_contains_formula():
     from app.pipeline.extract import docx_to_latex
     from app.pipeline.parse import latex_to_problems
@@ -226,7 +224,6 @@ def test_parse_analisis1_problem1_prose_contains_formula():
     assert r"x^{3} + 4x^{2} + x - 6" in problems[0].prose_latex
 
 
-@pytest.mark.xfail(reason="parser does not yet handle \\textbf{Problema N.} heading style")
 def test_parse_analisis1_problem1_has_subparts():
     from app.pipeline.extract import docx_to_latex
     from app.pipeline.parse import latex_to_problems
@@ -236,7 +233,6 @@ def test_parse_analisis1_problem1_has_subparts():
     assert len(problems[0].sub_parts) == 3
 
 
-@pytest.mark.xfail(reason="parser does not yet handle \\textbf{Problema N.} heading style")
 def test_parse_analisis1_problem2_has_subparts():
     from app.pipeline.extract import docx_to_latex
     from app.pipeline.parse import latex_to_problems
@@ -246,7 +242,6 @@ def test_parse_analisis1_problem2_has_subparts():
     assert len(problems[1].sub_parts) == 2
 
 
-@pytest.mark.xfail(reason="parser does not yet handle \\textbf{Problema N.} heading style")
 def test_parse_analisis1_problem3_no_subparts():
     from app.pipeline.extract import docx_to_latex
     from app.pipeline.parse import latex_to_problems
