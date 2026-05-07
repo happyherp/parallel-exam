@@ -20,6 +20,7 @@ from app.pipeline.parse import latex_to_problems
 from app.pipeline.prose import render_prose
 from app.pipeline.render import variants_to_docx
 from app.pipeline.reword import reword_surface
+from app.pipeline.template import extract_template
 from app.pipeline.templates_library.rational_business_profit import (
     RATIONAL_BUSINESS_PROFIT,
 )
@@ -98,7 +99,12 @@ async def upload(request: Request, file: UploadFile = File(...)):
     variants: dict[int, object] = {}
 
     for i, problem in enumerate(problems):
+        # 1. Try the hand-written library first (fastest, highest quality).
         tmpl = _find_template(problem.prose_latex)
+        # 2. Fall back to LLM-based template extraction. Returns None if the
+        #    API key is missing or the extracted template fails verification.
+        if tmpl is None:
+            tmpl = extract_template(problem)
         templates[i] = tmpl
         if tmpl is not None:
             try:
