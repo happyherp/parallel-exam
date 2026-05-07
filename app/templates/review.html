@@ -28,11 +28,11 @@
     <!-- Original -->
     <div class="problem-col">
       <div class="col-label">Original</div>
-      <div class="prose">{{ problem.prose_latex | safe }}</div>
+      <div class="prose">{{ problem.prose_latex | latex_prose | safe }}</div>
       {% if problem.sub_parts %}
       <div class="subparts">
         {% for part in problem.sub_parts %}
-        <div>{{ part | safe }}</div>
+        <div>{{ part | latex_prose | safe }}</div>
         {% endfor %}
       </div>
       {% endif %}
@@ -42,15 +42,25 @@
     <div class="problem-col">
       <div class="col-label">Variante generada</div>
 
-      {% if job.templates[i] %}
-        <div id="variant-{{ i }}">
+      <div id="variant-{{ i }}">
+        {% if job.templates[i] %}
           {% with variant=job.variants[i], template=job.templates[i], job_id=job.job_id, problem_idx=i %}
             {% include 'partials/variant_card.html' %}
           {% endwith %}
-        </div>
-      {% else %}
-        <p class="no-template-msg">Sin plantilla disponible para este tipo de problema — editar manualmente.</p>
-      {% endif %}
+        {% else %}
+          <p class="no-template-msg">No se ha intentado generar una variante todavía.</p>
+          <div class="regen-row">
+            <button class="btn btn-primary btn-sm"
+                    hx-post="/generate/{{ job.job_id }}/{{ i }}"
+                    hx-target="#variant-{{ i }}"
+                    hx-swap="innerHTML"
+                    hx-indicator="#indicator-{{ i }}">
+              Generar variante
+            </button>
+            <span id="indicator-{{ i }}" class="htmx-indicator">Generando…</span>
+          </div>
+        {% endif %}
+      </div>
     </div>
   </div>
 </div>

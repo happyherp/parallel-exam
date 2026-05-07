@@ -82,7 +82,8 @@ def test_upload_contains_katex_math(upload_response):
 
 
 def test_upload_other_problems_have_no_template(upload_response):
-    assert "Sin plantilla" in upload_response.text
+    # Problems without a library template show a "Generar variante" button (lazy path).
+    assert "Generar variante" in upload_response.text
 
 
 # ── /generate ─────────────────────────────────────────────────────────────────
@@ -129,9 +130,11 @@ def test_generate_unknown_job_returns_404(client):
     assert resp.status_code == 404
 
 
-def test_generate_problem_without_template_returns_400(client, job_id):
-    # Problems 1-4 (indices 1-4) have no template in v1.
-    resp = client.post(f"/generate/{job_id}/1")
+def test_generate_problem_without_template_falls_back_when_extraction_fails(client, job_id):
+    # When LLM extraction returns None (e.g. no API key, abstention), endpoint returns 400.
+    from unittest.mock import patch
+    with patch("app.main.extract_template", return_value=None):
+        resp = client.post(f"/generate/{job_id}/1")
     assert resp.status_code == 400
 
 

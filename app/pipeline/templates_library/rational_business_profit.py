@@ -17,7 +17,23 @@ Parameterisation:
         max profit  = f(p) = a/(2p) = n
 """
 
+from __future__ import annotations
+
+import re
+
 from app.models import Invariant, ParameterConstraint, Template
+
+_STRUCT_RE = re.compile(r"\\frac\{[^}]*x[^}]*\}\{x\^\{2\}")
+_KEYWORDS = ["ganancia", "ganancias", "pérdida", "pérdidas", "empresa", "beneficio"]
+
+
+def matches(prose_latex: str) -> bool:
+    """Return True only when prose has both the rational-function structure AND business keywords."""
+    if not _STRUCT_RE.search(prose_latex):
+        return False
+    lower = prose_latex.lower()
+    return any(kw in lower for kw in _KEYWORDS)
+
 
 RATIONAL_BUSINESS_PROFIT = Template(
     template_id="rational_business_profit_v1",
@@ -50,6 +66,7 @@ RATIONAL_BUSINESS_PROFIT = Template(
             must_be="positive_integer",
         ),
     ],
+    match_keywords=_KEYWORDS,
     prose_template=(
         r"La función \(f(x) = \frac{{ {{a}}x + {{b}} }}{{x^2 + {{c}} }}\) indica"
         r" las ganancias o pérdidas que una empresa ha tenido desde que fue"
